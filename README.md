@@ -1,103 +1,119 @@
-# AI Model Quantization - From Scratch
+# AI Model Quantization — Real GPU Testing
 
-A complete, from-scratch implementation of AI model quantization built for deep understanding through construction.
+Interactive quantization visualizer with real LLM quantization on NVIDIA L4 GPU via Google Cloud Run.
 
-## Overview
+## What This Does
 
-This project implements quantization primitives from first principles:
-- **Core quantization equation** with scale, zero-point, and clamping
-- **Mapping schemes**: Symmetric and asymmetric quantization
-- **Calibration methods**: MinMax, Percentile, and Entropy-based
-- **Granularity levels**: Per-tensor, per-channel, and per-group
-- **Algorithms**: PTQ, QAT (with STE), and GPTQ (Hessian-guided)
+Quantizes a real 1.1 billion parameter language model (TinyLlama) on GPU and visualizes exactly what happens to the weights, predictions, and text quality.
 
-## Features
+### Key Results (from actual GPU testing)
 
-- 🧮 **NumPy-based core**: All quantization math implemented from scratch
-- 🔬 **Property-based testing**: 15 correctness properties verified with Hypothesis
-- 📊 **Interactive UI**: 15+ Streamlit panels for visual learning
-- 📚 **Jupyter-compatible**: All core modules use `# %%` cell markers
+| Method | Size | Compression | Quality Loss | Speed |
+|--------|------|-------------|--------------|-------|
+| FP32 (original) | 4.1 GB | 1x | — | — |
+| INT8 Symmetric | 1.0 GB | 4x | +1.5% perplexity | 0.92s |
+| INT4 Symmetric | 525 MB | 8x | +2.9% perplexity | 1.07s |
+| INT3 Symmetric | 393 MB | 10.7x | +421% (broken) | 0.93s |
 
-## Installation
+**Generation speed:** 37 tokens/sec on NVIDIA L4 (90x faster than CPU)
 
-```bash
-# Install package and dependencies
-pip install -e .
+## Architecture
 
-# Install development dependencies
-pip install -e ".[dev]"
+```
+quantization-app/
+├── backend/                    # FastAPI + PyTorch (CUDA-enabled)
+│   ├── main.py                # API with /device-info endpoint
+│   ├── services/
+│   │   ├── device.py          # GPU/CPU auto-detection
+│   │   ├── real_quantization.py  # TinyLlama quantization engine
+│   │   ├── gptq_real.py       # GPTQ with Hessian on GPU
+│   │   └── calibration.py     # Wikitext-2 calibration loader
+│   └── routers/
+│       └── real_model.py      # All Real LLM API endpoints
+├── src/                        # Next.js frontend (React + Tailwind + Recharts)
+│   └── components/visualizers/
+│       └── RealModelQuantization.tsx  # GPU visualization panel
+├── deploy/                     # GCP deployment scripts
+│   ├── gcp-gpu-setup.ps1     # Windows PowerShell
+│   ├── gcp-gpu-setup.sh      # Linux/Mac
+│   └── gcp-manage.sh         # Start/stop/upload
+└── docs/                       # Educational documentation
 ```
 
 ## Quick Start
 
-```python
-import numpy as np
-from quantization import quantize, dequantize
-
-# Quantize a float32 tensor to int8
-x = np.array([1.5, -0.5, 0.0, 2.3], dtype=np.float32)
-scale = 0.02
-zero_point = 0
-bits = 8
-
-q = quantize(x, scale, zero_point, bits, signed=True)
-print(f"Quantized: {q}")  # [-128, -25, 0, 115]
-
-x_reconstructed = dequantize(q, scale, zero_point)
-print(f"Reconstructed: {x_reconstructed}")
-```
-
-## Running Tests
+### Backend (FastAPI)
 
 ```bash
-# Run all tests with coverage
-pytest
-
-# Run specific property tests
-pytest quantization/tests/test_quantizer.py -v
-
-# Run with Hypothesis verbosity
-pytest --hypothesis-verbosity=verbose
+cd quantization-app/backend
+pip install uv && uv sync
+uv run uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-## Interactive Dashboard
+### Frontend (Next.js)
 
 ```bash
-streamlit run quantization/ui/app.py
+cd quantization-app
+npm install
+echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > .env.local
+npm run dev
 ```
 
-Navigate through 15 interactive panels covering:
-- FP32 format visualization
-- Quantization pipeline
-- Weight distributions
-- Calibration methods
-- PTQ, QAT, and GPTQ algorithms
+Open http://localhost:3000 → click "Real LLM" tab.
 
-## Project Structure
+## GPU Deployment (Google Cloud Run)
 
-```
-quantization/
-├── quantizer.py          # Core quantize/dequantize
-├── schemes.py            # Symmetric/asymmetric schemes
-├── calibrator.py         # Calibration methods
-├── granularity.py        # Per-tensor/channel/group
-├── ptq.py                # Post-Training Quantization
-├── qat.py                # Quantization-Aware Training
-├── gptq.py               # GPTQ algorithm
-├── fp32_format.py        # IEEE 754 utilities
-├── benefits.py           # Memory/compute analysis
-├── tests/                # Property-based test suite
-└── ui/                   # Streamlit dashboard
-    ├── app.py
-    └── panels/
+```bash
+gcloud auth login
+gcloud config set project YOUR_PROJECT_ID
+
+# Build container
+gcloud builds submit backend/ \
+  --tag=REGION-docker.pkg.dev/PROJECT/REPO/backend:latest
+
+# Deploy with L4 GPU
+gcloud beta run deploy quantization-gpu \
+  --image=REGION-docker.pkg.dev/PROJECT/REPO/backend:latest \
+  --gpu=1 --gpu-type=nvidia-l4 --cpu=4 --memory=16Gi \
+  --max-instances=1 --no-gpu-zonal-redundancy \
+  --allow-unauthenticated --port=8080
 ```
 
-## Documentation
+Cost: ~$0 when idle (scales to zero), charges only per request.
 
-- [Requirements](requirements.md) - Detailed acceptance criteria
-- [Design](design.md) - Architecture and algorithms
-- [Tasks](tasks.md) - Implementation plan
+## Visualizations
 
-## License
+The app provides interactive visualizations:
 
-MIT License - Educational purposes
+1. **Number Line Snap** — real weight values snapping to quantization grid
+2. **Weight Matrix Heatmap** — before/after like image compression
+3. **Token Probability Shift** — how next-word predictions change
+4. **Quantization Grid Resolution** — INT8 (256 levels) vs INT4 (16) vs INT3 (8)
+5. **Error Distribution** — the noise profile from rounding
+6. **Perplexity Comparison** — quality metric across all methods
+7. **Layer Sensitivity** — which layers degrade most
+
+## API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /device-info` | GPU detection status |
+| `GET /api/real-model/info` | Load model, return stats |
+| `POST /api/real-model/quantize` | Quantize + measure perplexity |
+| `POST /api/real-model/compare` | Compare INT8/INT4/INT3 |
+| `POST /api/real-model/deep-visualize` | Number line + heatmap + token probs |
+| `POST /api/real-model/gptq` | GPTQ with calibration data |
+| `POST /api/real-model/benchmark-speed` | Tokens/second measurement |
+| `POST /api/real-model/sensitivity` | Per-layer sensitivity analysis |
+
+## Tech Stack
+
+- **Backend:** Python, FastAPI, PyTorch 2.6, CUDA 12.6, Transformers
+- **Frontend:** Next.js 15, React, Tailwind CSS, Recharts, shadcn/ui
+- **GPU:** NVIDIA L4 (22.5 GB VRAM) via Google Cloud Run
+- **Model:** TinyLlama-1.1B-Chat (HuggingFace)
+- **Deployment:** Docker, Google Cloud Build, Artifact Registry
+
+## Full Results
+
+See [GPU_QUANTIZATION_TESTING.md](GPU_QUANTIZATION_TESTING.md) for detailed test results, tables, and findings.
