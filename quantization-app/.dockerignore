@@ -1,0 +1,16 @@
+node_modules
+.next
+backend/.venv
+backend/__pycache__
+backend/**/__pycache__
+backend/exports
+backend/.cache
+.git
+*.zip
+docs/
+deploy/
+.dockerignore
+DEPLOY.md
+README.md
+start.bat
+start.sh

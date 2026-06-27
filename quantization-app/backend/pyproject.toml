@@ -1,0 +1,28 @@
+[project]
+name = "quantization-backend"
+version = "0.1.0"
+description = "FastAPI backend for quantization visualization"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "numpy>=2.0.0",
+    "torch>=2.5.0",
+    "torchvision>=0.20.0",
+    "python-multipart>=0.0.20",
+    "pydantic>=2.10.0",
+    "scipy>=1.15.0",
+    "ml-dtypes>=0.4.0",
+    "transformers>=4.40.0",
+    "accelerate>=0.30.0",
+    "sentencepiece>=0.2.0",
+    "datasets>=2.14.0",
+    "safetensors>=0.4.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["routers", "services", "models"]

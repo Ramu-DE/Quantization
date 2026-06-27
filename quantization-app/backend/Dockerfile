@@ -1,0 +1,32 @@
+FROM pytorch/pytorch:2.6.0-cuda12.6-cudnn9-runtime
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl git && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies directly (no uv needed in container)
+RUN pip install --no-cache-dir \
+    "fastapi>=0.115.0" \
+    "uvicorn[standard]>=0.32.0" \
+    "numpy>=2.0.0" \
+    "python-multipart>=0.0.20" \
+    "pydantic>=2.10.0" \
+    "scipy>=1.15.0" \
+    "ml-dtypes>=0.4.0" \
+    "transformers>=4.40.0,<5.0.0" \
+    "accelerate>=0.30.0" \
+    "sentencepiece>=0.2.0" \
+    "datasets>=2.14.0" \
+    "safetensors>=0.4.0"
+
+# Copy application code
+COPY . .
+
+# Cloud Run uses PORT env var (default 8080)
+ENV PORT=8080
+ENV CORS_ORIGINS=*
+ENV HF_HOME=/tmp/hf_cache
+
+EXPOSE 8080
+
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
